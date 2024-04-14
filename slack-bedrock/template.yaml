@@ -1,0 +1,51 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: |
+  slack-bedrock
+  Sample SAM Template for slack-bedrock
+Globals:
+  Function:
+    Timeout: 3
+Resources:
+  SlackWebApiLayer:
+    Type: AWS::Serverless::LayerVersion
+    Properties:
+      Description: !Sub
+        - Stack ${AWS::StackName} Layer ${ResourceName}
+        - ResourceName: SlackWebApiLayer
+      ContentUri: dependencies/
+      RetentionPolicy: Retain
+    Metadata:
+      BuildMethod: nodejs20.x
+  HelloWorldFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: hello-world/
+      Handler: app.lambdaHandler
+      Runtime: nodejs20.x
+      MemorySize: 128
+      Timeout: 180
+      FunctionUrlConfig:
+        AuthType: NONE
+      Architectures:
+        - arm64
+      Policies: AmazonBedrockFullAccess
+      Environment:
+        Variables:
+          CHARACTER_CONFIG: あなたはクラウディアという名前の優れたAIアシスタントです。 Slackのmrkdwn形式で回答してください。<@********>はあなた宛のメンションです。 あなたは画像や添付ファイルを読み込む機能を有していません。 分からない・知らないことは素直にそう伝えてください。誤った情報を生み出さないでください。 "----"はユーザー発言の区切り文字として利用されます。一番最後の指示に従ってください。
+          CHARACTER_THINKING_TEXT: クラウディアさんが考え中です...
+          CLAUDE_MODEL_ID: anthropic.claude-3-sonnet-20240229-v1:0
+          SLACK_BOT_TOKEN: '*'
+          SLACK_SIGNING_SECRET: '*'
+      Layers:
+        - !Ref SlackWebApiLayer
+Outputs:
+  HelloWorldFunction:
+    Description: Hello World Lambda Function ARN
+    Value: !GetAtt HelloWorldFunction.Arn
+  HelloWorldFunctionIamRole:
+    Description: Implicit IAM Role created for Hello World function
+    Value: !GetAtt HelloWorldFunctionRole.Arn
+  HelloWorldFunctionUrl:
+    Description: Function URLs endpoint
+    Value: !GetAtt HelloWorldFunctionUrl.FunctionUrl
