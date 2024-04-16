@@ -32,8 +32,8 @@ Resources:
       Policies: AmazonBedrockFullAccess
       Environment:
         Variables:
-          CHARACTER_CONFIG: あなたはクラウディアという名前の優れたAIアシスタントです。 Slackのmrkdwn形式で回答してください。<@********>はあなた宛のメンションです。 あなたは画像や添付ファイルを読み込む機能を有していません。 分からない・知らないことは素直にそう伝えてください。誤った情報を生み出さないでください。 "----"はユーザー発言の区切り文字として利用されます。一番最後の指示に従ってください。
-          CHARACTER_THINKING_TEXT: クラウディアさんが考え中です...
+          CHARACTER_CONFIG: あなたはSlackSampleBotという名前の優れたAIアシスタントです。 Slackのmrkdwn形式で回答してください。<@********>はあなた宛のメンションです。  分からない・知らないことは素直にそう伝えてください。誤った情報を生み出さないでください。 "----"はユーザー発言の区切り文字として利用されます。一番最後の指示に従ってください。
+          CHARACTER_THINKING_TEXT: SlackSampleBotさんが考え中です...
           CLAUDE_MODEL_ID: anthropic.claude-3-sonnet-20240229-v1:0
           SLACK_BOT_TOKEN: '*'
           SLACK_SIGNING_SECRET: '*'

@@ -1,7 +1,8 @@
+import axios from 'axios';
 import { BedrockRuntimeClient, InvokeModelCommand } from "@aws-sdk/client-bedrock-runtime";
 import { WebClient } from '@slack/web-api';
 import { createHmac, timingSafeEqual } from 'crypto';
- 
+
 // Slack BotのトークンとAIモデルIDを環境変数から読み込む
 const slackBotToken = process.env.SLACK_BOT_TOKEN;
 const modelId = process.env.CLAUDE_MODEL_ID || 'anthropic.claude-3-sonnet-20240229-v1:0';
@@ -12,7 +13,7 @@ const slackSigningSecret = process.env.SLACK_SIGNING_SECRET;
 // AWSとSlackのクライアントを初期化
 const awsClient = new BedrockRuntimeClient({ region: 'us-east-1' });
 const slackClient = new WebClient(slackBotToken);
- 
+
 // Slack リクエストの署名を検証する関数
 function verifySlackRequestSignature(event) {
   const requestSignature = event.headers['x-slack-signature'];
@@ -34,40 +35,57 @@ function verifySlackRequestSignature(event) {
   // 計算した署名とSlackから受け取った署名を比較
   return timingSafeEqual(Buffer.from(mySignature, 'utf8'), Buffer.from(requestSignature, 'utf8'));
 }
- 
+
+// 画像を取得する
+async function getFile(url) {
+  try {
+    const response = await axios.get(url, {
+      responseType: 'arraybuffer',
+      headers: {
+        Authorization: `Bearer ${slackBotToken}`
+      }
+    });
+    const myBuffer = Buffer.from(response.data)
+    const base64 = myBuffer.toString('base64')
+    return base64;
+  } catch (error) {
+      console.error('Error fetching image:', error.message);
+      throw(error);
+  }
+}
+
 // Slackのスレッドからプロンプトを生成する関数
 async function generatePromptsFromSlackHistory(slackEvent) {
   const prompts = []; // プロンプトを格納する配列
   let previousRole = "user"; // 前のメッセージのロールを追跡
- 
+
   // スレッドのメッセージかどうかを判定
   const isThread = slackEvent.thread_ts && slackEvent.thread_ts !== slackEvent.ts;
   const targetTs = isThread ? slackEvent.thread_ts : slackEvent.ts;
-   
+  
   // Slack APIを使ってスレッドのメッセージを取得
   const response = await slackClient.conversations.replies({ channel: slackEvent.channel, ts: targetTs });
   console.log(JSON.stringify({ event: "slackThreadSearched", messages: response.messages }));
- 
-  // 最後のメッセージがBotからのものなら削除
-  if (response.messages && response.messages[response.messages.length - 1].bot_id) {
+   
+    // 最後のメッセージがBotからのものなら削除
+    if (response.messages && response.messages[response.messages.length - 1].bot_id) {
     response.messages.pop();
   }
- 
+  
   // メッセージが空かBotからのものだけなら、ユーザーメッセージを強制的に挿入
   if (response.messages.length === 0 || response.messages[0].bot_id) {
     prompts.push({ role: "user", content: "----" });
   }
- 
+  
   // メッセージごとにプロンプトを生成
-  response.messages.forEach((message) => {
+  await Promise.all(response.messages.map(async (message) => {
     const role = message.bot_id ? 'assistant' : 'user';
     let content = message.text;
- 
     // アタッチメントがある場合は含める
     if (message.attachments) {
       content += message.attachments.map(a => `\n[Attachments]\n${JSON.stringify(a)}`).join("\n");
     }
- 
+  
     // 前のメッセージと同じロールの場合はテキストを結合
     if (prompts.length > 0 && role === previousRole) {
       prompts[prompts.length - 1].content += `\n----\n${content}`;
@@ -75,13 +93,31 @@ async function generatePromptsFromSlackHistory(slackEvent) {
       prompts.push({ role, content });
     }
     previousRole = role;
-  });
- 
+
+    // 添付ファイルがある場合
+    if (message.files) {
+      prompts[prompts.length - 1].content = [
+        {
+          "type": "image",
+          "source": {
+            "type": "base64",
+            "media_type": message.files[0]?.mimetype,
+            "data": await getFile(message.files[0]?.url_private)
+          }
+        },
+        {
+            "type": "text",
+            "text": content
+        }
+      ];
+    }
+  }));      
+
   // 生成されたプロンプトをログに記録
   console.log(JSON.stringify({ event: "promptGenerated", prompts }));
   return prompts;
 }
- 
+
 // AIモデルを呼び出してテキストを生成する関数
 async function generateTextWithAI(prompts) {
   const command = new InvokeModelCommand({
